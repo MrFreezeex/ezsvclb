@@ -20,11 +20,19 @@ import (
 	"context"
 
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
+
+const loadBalancerClass = "ezsvclb"
 
 // ServiceReconciler reconciles a Service object
 type ServiceReconciler struct {
@@ -34,6 +42,7 @@ type ServiceReconciler struct {
 
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups="",resources=services/status,verbs=update;patch
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -57,5 +66,15 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 func (r *ServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Service{}).
+		Watches(&source.Kind{Type: &v1.Endpoints{}},
+			handler.EnqueueRequestsFromMapFunc(func(obj client.Object) []reconcile.Request {
+				endpoints, ok := obj.(*v1.Endpoints)
+				if !ok {
+					return []reconcile.Request{}
+				}
+				name := types.NamespacedName{Name: endpoints.Name, Namespace: endpoints.Namespace}
+				return []reconcile.Request{{NamespacedName: name}}
+			})).
+		Watches(&source.Kind{Type: &v1.Node{}}, &handler.EnqueueRequestForObject{}).
 		Complete(r)
 }
