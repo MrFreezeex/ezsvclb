@@ -28,7 +28,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -45,21 +44,43 @@ type ServiceReconciler struct {
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the Service object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.14.1/pkg/reconcile
 func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	_ = log.FromContext(ctx).WithValues("service", req.NamespacedName)
 
-	// TODO(user): your logic here
+	svc := &corev1.Service{}
+	err := r.Get(ctx, req.NamespacedName, svc)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			// Object not found, return.
+			return ctrl.Result{}, nil
+		}
+		// Error reading the object - requeue the request.
+		return ctrl.Result{}, err
+	}
+
+	if !isServiceSupported(svc) {
+		return ctrl.Result{}, nil
+	}
+
+	// TODO
 
 	return ctrl.Result{}, nil
+}
+
+// isServiceSupported returns true if the service is supported by the controller
+func isServiceSupported(service *corev1.Service) bool {
+	if !service.DeletionTimestamp.IsZero() {
+		return false
+	}
+	if service.Spec.Type != corev1.ServiceTypeLoadBalancer {
+		return false
+	}
+	if service.Spec.LoadBalancerClass != nil {
+		return *service.Spec.LoadBalancerClass == loadBalancerClass
+	}
+
+	// TOOD: add a config to optionally enable this controller by default without a LoadBalancerClass
+	return false
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -67,13 +88,13 @@ func (r *ServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Service{}).
 		Watches(&source.Kind{Type: &v1.Endpoints{}},
-			handler.EnqueueRequestsFromMapFunc(func(obj client.Object) []reconcile.Request {
+			handler.EnqueueRequestsFromMapFunc(func(obj client.Object) []ctrl.Request {
 				endpoints, ok := obj.(*v1.Endpoints)
 				if !ok {
-					return []reconcile.Request{}
+					return []ctrl.Request{}
 				}
 				name := types.NamespacedName{Name: endpoints.Name, Namespace: endpoints.Namespace}
-				return []reconcile.Request{{NamespacedName: name}}
+				return []ctrl.Request{{NamespacedName: name}}
 			})).
 		Watches(&source.Kind{Type: &v1.Node{}}, &handler.EnqueueRequestForObject{}).
 		Complete(r)
