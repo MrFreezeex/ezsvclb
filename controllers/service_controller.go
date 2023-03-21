@@ -24,10 +24,10 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -36,7 +36,8 @@ const loadBalancerClass = "ezsvclb"
 // ServiceReconciler reconciles a Service object
 type ServiceReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;update;patch
@@ -45,8 +46,6 @@ type ServiceReconciler struct {
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx).WithValues("service", req.NamespacedName)
-
 	svc := &corev1.Service{}
 	err := r.Get(ctx, req.NamespacedName, svc)
 	if err != nil {
@@ -62,7 +61,13 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, nil
 	}
 
-	// TODO
+	newStatus, err := r.getStatus(ctx, req, svc)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if err = r.patchStatus(ctx, svc, newStatus); err != nil {
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, nil
 }
