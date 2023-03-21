@@ -38,6 +38,7 @@ type ServiceReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
+	EnableDefaultLoadBalancer bool
 }
 
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;update;patch
@@ -58,7 +59,7 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
-	if !isServiceSupported(svc) {
+	if !r.isServiceSupported(svc) {
 		return ctrl.Result{}, nil
 	}
 
@@ -74,7 +75,7 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 }
 
 // isServiceSupported returns true if the service is supported by the controller
-func isServiceSupported(service *corev1.Service) bool {
+func (r ServiceReconciler) isServiceSupported(service *corev1.Service) bool {
 	if !service.DeletionTimestamp.IsZero() {
 		return false
 	}
@@ -84,9 +85,7 @@ func isServiceSupported(service *corev1.Service) bool {
 	if service.Spec.LoadBalancerClass != nil {
 		return *service.Spec.LoadBalancerClass == loadBalancerClass
 	}
-
-	// TOOD: add a config to optionally enable this controller by default without a LoadBalancerClass
-	return false
+	return r.EnableDefaultLoadBalancer
 }
 
 // SetupWithManager sets up the controller with the Manager.
