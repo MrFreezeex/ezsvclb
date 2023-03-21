@@ -36,8 +36,8 @@ const loadBalancerClass = "ezsvclb"
 // ServiceReconciler reconciles a Service object
 type ServiceReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Scheme                    *runtime.Scheme
+	Recorder                  record.EventRecorder
 	EnableDefaultLoadBalancer bool
 }
 

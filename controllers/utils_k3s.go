@@ -16,7 +16,7 @@ import (
 // and slightly adapted for our usecase.
 
 // patchStatus patches the service status. If the status has not changed, this function is a no-op.
-func (r *ServiceReconciler) patchStatus(ctx context.Context, svc *corev1.Service, newStatus *corev1.LoadBalancerStatus) error {
+func (r ServiceReconciler) patchStatus(ctx context.Context, svc *corev1.Service, newStatus *corev1.LoadBalancerStatus) error {
 	previousStatus := svc.Status.LoadBalancer.DeepCopy()
 	if servicehelper.LoadBalancerStatusEqual(previousStatus, newStatus) {
 		return nil
@@ -39,7 +39,7 @@ func (r *ServiceReconciler) patchStatus(ctx context.Context, svc *corev1.Service
 
 // getStatus returns a LoadBalancerStatus listing ingress IPs for all ready pods
 // matching the selected service.
-func (r *ServiceReconciler) getStatus(ctx context.Context, req ctrl.Request, svc *corev1.Service) (*corev1.LoadBalancerStatus, error) {
+func (r ServiceReconciler) getStatus(ctx context.Context, req ctrl.Request, svc *corev1.Service) (*corev1.LoadBalancerStatus, error) {
 	var readyNodes map[string]bool
 
 	readyNodes = map[string]bool{}
@@ -76,7 +76,7 @@ func (r *ServiceReconciler) getStatus(ctx context.Context, req ctrl.Request, svc
 // nodeIPs returns a list of IPs for Nodes hosting ServiceLB Pods.
 // If at least one node has External IPs available, only external IPs are returned.
 // If no nodes have External IPs set, the Internal IPs of all nodes running pods are returned.
-func (r *ServiceReconciler) nodeIPs(ctx context.Context, svc *corev1.Service, readyNodes map[string]bool) ([]string, error) {
+func (r ServiceReconciler) nodeIPs(ctx context.Context, svc *corev1.Service, readyNodes map[string]bool) ([]string, error) {
 	// Go doesn't have sets so we stuff things into a map of bools and then get lists of keys
 	// to determine the unique set of IPs in use by pods.
 	extIPs := map[string]bool{}
