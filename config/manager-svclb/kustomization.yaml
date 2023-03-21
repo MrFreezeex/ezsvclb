@@ -1,0 +1,4 @@
+resources:
+- ../manager
+patchesStrategicMerge:
+- manager_svclb.yaml
