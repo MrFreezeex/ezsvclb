@@ -128,11 +128,11 @@ func (r *ServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				}
 
 				// Attempt to resync all supported service if a node change
-				requests := make([]ctrl.Request, len(services.Items))
-				for i, service := range services.Items {
+				requests := []ctrl.Request{}
+				for _, service := range services.Items {
 					if r.isServiceSupported(&service) {
 						name := types.NamespacedName{Name: service.Name, Namespace: service.Namespace}
-						requests[i] = ctrl.Request{NamespacedName: name}
+						requests = append(requests, ctrl.Request{NamespacedName: name})
 					}
 				}
 				return requests
