@@ -113,6 +113,29 @@ func (r *ServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				name := types.NamespacedName{Name: endpoints.Name, Namespace: endpoints.Namespace}
 				return []ctrl.Request{{NamespacedName: name}}
 			})).
-		Watches(&source.Kind{Type: &v1.Node{}}, &handler.EnqueueRequestForObject{}).
+		Watches(&source.Kind{Type: &v1.Node{}},
+			handler.EnqueueRequestsFromMapFunc(func(obj client.Object) []ctrl.Request {
+				_, ok := obj.(*v1.Node)
+				if !ok {
+					log.Log.Error(fmt.Errorf("Can't cast to a node"), "Received a non node object")
+					return []ctrl.Request{}
+				}
+
+				var services corev1.ServiceList
+				if err := r.List(context.TODO(), &services); err != nil {
+					log.Log.Error(err, "Can't list services")
+					return []ctrl.Request{}
+				}
+
+				// Attempt to resync all supported service if a node change
+				requests := make([]ctrl.Request, len(services.Items))
+				for i, service := range services.Items {
+					if r.isServiceSupported(&service) {
+						name := types.NamespacedName{Name: service.Name, Namespace: service.Namespace}
+						requests[i] = ctrl.Request{NamespacedName: name}
+					}
+				}
+				return requests
+			})).
 		Complete(r)
 }
