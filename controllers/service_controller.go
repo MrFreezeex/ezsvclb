@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -28,6 +29,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -48,6 +50,8 @@ type ServiceReconciler struct {
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	log := log.FromContext(ctx).WithValues("service", req.NamespacedName)
+
 	svc := &corev1.Service{}
 	err := r.Get(ctx, req.NamespacedName, svc)
 	if err != nil {
@@ -56,18 +60,25 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return ctrl.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
+		log.Error(err, "unable to fetch Service")
 		return ctrl.Result{}, err
 	}
 
+	log.Info("Start reconciling Service")
+	defer log.Info("End reconciling Service")
+
 	if !r.isServiceSupported(svc) {
+		log.Info("Service is not supported by the controller")
 		return ctrl.Result{}, nil
 	}
 
 	newStatus, err := r.getStatus(ctx, req, svc)
 	if err != nil {
+		log.Error(err, "unable to get Service status")
 		return ctrl.Result{}, err
 	}
 	if err = r.patchStatus(ctx, svc, newStatus); err != nil {
+		log.Error(err, "Unable to patch Service status")
 		return ctrl.Result{}, err
 	}
 
@@ -96,6 +107,7 @@ func (r *ServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(func(obj client.Object) []ctrl.Request {
 				endpoints, ok := obj.(*v1.Endpoints)
 				if !ok {
+					log.Log.Error(fmt.Errorf("Can't cast to an endpoint"), "Received a non endpoint object")
 					return []ctrl.Request{}
 				}
 				name := types.NamespacedName{Name: endpoints.Name, Namespace: endpoints.Namespace}
