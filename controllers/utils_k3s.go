@@ -60,7 +60,7 @@ func (r ServiceReconciler) getStatus(ctx context.Context, req ctrl.Request, svc 
 
 	status := corev1.LoadBalancerStatus{}
 	if hasHostnameSupport(svc) {
-		status.Ingress = getHostnameStatus(nodes)
+		status.Ingress = getHostnameStatus(nodes, svc)
 	}
 
 	if !hasIPSupport(svc) {
@@ -117,8 +117,12 @@ func hasIPSupport(svc corev1.Service) bool {
 	return annotationIpValue == "true" || annotationIpValue == ""
 }
 
+func getHostnameSuffix(svc corev1.Service) string {
+	return svc.Annotations[annotationHostnameSuffix]
+}
+
 // Entries are sorted by hostname.
-func getHostnameStatus(nodes []corev1.Node) []corev1.LoadBalancerIngress {
+func getHostnameStatus(nodes []corev1.Node, svc corev1.Service) []corev1.LoadBalancerIngress {
 	hostnames := make([]string, len(nodes))
 	for i, node := range nodes {
 		hostnames[i] = node.Name
@@ -127,7 +131,7 @@ func getHostnameStatus(nodes []corev1.Node) []corev1.LoadBalancerIngress {
 
 	statuses := make([]corev1.LoadBalancerIngress, len(nodes))
 	for i, hostname := range hostnames {
-		statuses[i] = corev1.LoadBalancerIngress{Hostname: hostname}
+		statuses[i] = corev1.LoadBalancerIngress{Hostname: hostname + getHostnameSuffix(svc)}
 	}
 
 	return statuses
