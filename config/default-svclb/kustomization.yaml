@@ -6,4 +6,4 @@ bases:
 - ../manager
 
 patchesStrategicMerge:
-- manager_auth_proxy_patch.yaml
+- manager_svclb_patch.yaml
