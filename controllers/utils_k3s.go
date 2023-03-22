@@ -13,6 +13,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+const (
+	annotationForceDualStack = "ezsvclb.io/force-dual-stack"
+)
+
 // These functions are imported from the k3s project codebase (k3s/pkg/cloudprovider/servicelb.go)
 // and slightly adapted for our usecase.
 
@@ -125,7 +129,8 @@ func (r ServiceReconciler) nodeIPs(ctx context.Context, svc *corev1.Service, rea
 		ips = keys(intIPs)
 	}
 
-	ips, err := filterByIPFamily(ips, svc)
+	forceDualStack := svc.Annotations[annotationForceDualStack] == "true"
+	ips, err := filterByIPFamily(ips, svc, forceDualStack)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +139,7 @@ func (r ServiceReconciler) nodeIPs(ctx context.Context, svc *corev1.Service, rea
 }
 
 // filterByIPFamily filters node IPs based on dual-stack parameters of the service
-func filterByIPFamily(ips []string, svc *corev1.Service) ([]string, error) {
+func filterByIPFamily(ips []string, svc *corev1.Service, forceDualStack bool) ([]string, error) {
 	var ipv4Addresses []string
 	var ipv6Addresses []string
 	var allAddresses []string
@@ -146,6 +151,12 @@ func filterByIPFamily(ips []string, svc *corev1.Service) ([]string, error) {
 		if utilsnet.IsIPv6String(ip) {
 			ipv6Addresses = append(ipv6Addresses, ip)
 		}
+	}
+
+	if forceDualStack {
+		allAddresses = append(allAddresses, ipv4Addresses...)
+		allAddresses = append(allAddresses, ipv6Addresses...)
+		return allAddresses, nil
 	}
 
 	for _, ipFamily := range svc.Spec.IPFamilies {
