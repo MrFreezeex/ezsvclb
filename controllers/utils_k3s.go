@@ -10,6 +10,7 @@ import (
 	servicehelper "k8s.io/cloud-provider/service/helpers"
 	utilsnet "k8s.io/utils/net"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // These functions are imported from the k3s project codebase (k3s/pkg/cloudprovider/servicelb.go)
@@ -17,14 +18,18 @@ import (
 
 // patchStatus patches the service status. If the status has not changed, this function is a no-op.
 func (r ServiceReconciler) patchStatus(ctx context.Context, svc *corev1.Service, newStatus *corev1.LoadBalancerStatus) error {
+	log := log.FromContext(ctx).WithValues("service", types.NamespacedName{Name: svc.Name, Namespace: svc.Namespace})
+
 	previousStatus := svc.Status.LoadBalancer.DeepCopy()
 	if servicehelper.LoadBalancerStatusEqual(previousStatus, newStatus) {
 		return nil
 	}
 
-	updated := svc.DeepCopy()
-	updated.Status.LoadBalancer = *newStatus
-	err := r.Update(ctx, updated)
+	log.WithValues("previousStatus", previousStatus).WithValues("newStatus", newStatus).Info("Patching the service load balancer")
+
+	updatedSvc := svc.DeepCopy()
+	updatedSvc.Status.LoadBalancer = *newStatus
+	err := r.Status().Update(ctx, updatedSvc)
 	if err != nil {
 		return err
 	}
@@ -32,7 +37,7 @@ func (r ServiceReconciler) patchStatus(ctx context.Context, svc *corev1.Service,
 	if len(newStatus.Ingress) == 0 {
 		r.Recorder.Event(svc, corev1.EventTypeWarning, "UnAvailableLoadBalancer", "There are no available nodes for LoadBalancer")
 	} else {
-		r.Recorder.Eventf(svc, corev1.EventTypeNormal, "UpdatedLoadBalancer", "Updated LoadBalancer with new IPs: %v -> %v", previousStatus.Ingress, newStatus.Ingress)
+		r.Recorder.Eventf(svc, corev1.EventTypeNormal, "UpdatedLoadBalancer", "Updated LoadBalancer with new IPs: %v -> %v", previousStatus, newStatus)
 	}
 	return nil
 }
