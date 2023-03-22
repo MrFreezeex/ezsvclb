@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"sort"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -15,6 +16,9 @@ import (
 
 const (
 	annotationForceDualStack = "ezsvclb.io/force-dual-stack"
+	annotationHostname       = "ezsvclb.io/hostname"
+	annotationHostnameSuffix = "ezsvclb.io/hostname-suffix"
+	annotationIp             = "ezsvclb.io/ip"
 )
 
 // These functions are imported from the k3s project codebase (k3s/pkg/cloudprovider/servicelb.go)
@@ -65,47 +69,78 @@ func (r ServiceReconciler) getStatus(ctx context.Context, req ctrl.Request, svc 
 		}
 	}
 
-	expectedIPs, err := r.nodeIPs(ctx, svc, readyNodes)
-	if err != nil {
-		return nil, err
+	status := corev1.LoadBalancerStatus{}
+	var nodes corev1.NodeList
+	if err := r.List(ctx, &nodes); err != nil {
+		return &status, err
 	}
 
-	sort.Strings(expectedIPs)
+	relevantsNodes := []corev1.Node{}
+	for _, node := range nodes.Items {
+		if !readyNodes[node.Name] {
+			continue
+		}
 
-	loadbalancer := &corev1.LoadBalancerStatus{}
-	for _, ip := range expectedIPs {
-		loadbalancer.Ingress = append(loadbalancer.Ingress, corev1.LoadBalancerIngress{
-			IP: ip,
-		})
+		relevantsNodes = append(relevantsNodes, node)
 	}
 
-	return loadbalancer, nil
+	return r.getHostnameIpStatus(ctx, svc, relevantsNodes)
 }
 
-// nodeIPs returns a list of IPs for Nodes hosting ServiceLB Pods.
+// getHostnameIpStatus returns a list of IPs for Nodes hosting ServiceLB Pods.
 // If at least one node has External IPs available, only external IPs are returned.
 // If no nodes have External IPs set, the Internal IPs of all nodes running pods are returned.
-func (r ServiceReconciler) nodeIPs(ctx context.Context, svc *corev1.Service, readyNodes map[string]bool) ([]string, error) {
-	// Go doesn't have sets so we stuff things into a map of bools and then get lists of keys
-	// to determine the unique set of IPs in use by pods.
+// Also set the hostname if the appropriate annotation is set (disabled by default)
+// List is sorted with every hostnames first and then all the IPs.
+func (r ServiceReconciler) getHostnameIpStatus(ctx context.Context, svc *corev1.Service, nodes []corev1.Node) (*corev1.LoadBalancerStatus, error) {
+	status := corev1.LoadBalancerStatus{}
+
+	if hasHostnameSupport(svc) {
+		status.Ingress = getHostnameStatus(nodes)
+	}
+
+	if !hasIPSupport(svc) {
+		return &status, nil
+	}
+
+	status.Ingress = append(status.Ingress, getIPStatus(nodes, svc)...)
+	return &status, nil
+}
+
+func hasDualStackSupport(svc *corev1.Service) bool {
+	return strings.ToLower(svc.Annotations[annotationForceDualStack]) == "true"
+}
+
+func hasHostnameSupport(svc *corev1.Service) bool{
+	return strings.ToLower(svc.Annotations[annotationHostname]) == "true"
+}
+
+func hasIPSupport(svc *corev1.Service) bool{
+	annotationIpValue := strings.ToLower(svc.Annotations[annotationIp])
+	return annotationIpValue == "true" || annotationIpValue == ""
+}
+
+func getHostnameStatus(nodes []corev1.Node) []corev1.LoadBalancerIngress {
+	hostnames := make([]string, len(nodes))
+	for i, node := range nodes {
+		hostnames[i] = node.Name
+	}
+	sort.Strings(hostnames)
+
+	statuses := make([]corev1.LoadBalancerIngress, len(nodes))
+	for i, hostname := range hostnames {
+		statuses[i] = corev1.LoadBalancerIngress{Hostname: hostname}
+	}
+
+	return statuses
+}
+
+func getIPStatus(nodes []corev1.Node, svc *corev1.Service) []corev1.LoadBalancerIngress {
+    // to determine the unique set of IPs in use by pods.
 	extIPs := map[string]bool{}
 	intIPs := map[string]bool{}
 
-	var nodes corev1.NodeList
-	if err := r.List(ctx, &nodes); err != nil {
-		//fmt.Printf("Error fetching nodes, check your permissions: %+v\n", err)
-		return nil, err
-	}
-
-	for nodeName := range readyNodes {
-		node := &corev1.Node{}
-		err := r.Get(ctx, types.NamespacedName{Name: nodeName}, node)
-		if apierrors.IsNotFound(err) {
-			continue
-		} else if err != nil {
-			return nil, err
-		}
-
+	for _, node := range nodes {
 		for _, addr := range node.Status.Addresses {
 			if addr.Type == corev1.NodeExternalIP {
 				extIPs[addr.Address] = true
@@ -129,17 +164,21 @@ func (r ServiceReconciler) nodeIPs(ctx context.Context, svc *corev1.Service, rea
 		ips = keys(intIPs)
 	}
 
-	forceDualStack := svc.Annotations[annotationForceDualStack] == "true"
-	ips, err := filterByIPFamily(ips, svc, forceDualStack)
-	if err != nil {
-		return nil, err
+	ips = filterByIPFamily(ips, svc)
+	sort.Strings(ips)
+
+	statuses := make([]corev1.LoadBalancerIngress, len(ips))
+	for i, ip := range ips {
+		statuses[i] = corev1.LoadBalancerIngress{IP: ip}
 	}
 
-	return ips, nil
+	return statuses
+
 }
 
+
 // filterByIPFamily filters node IPs based on dual-stack parameters of the service
-func filterByIPFamily(ips []string, svc *corev1.Service, forceDualStack bool) ([]string, error) {
+func filterByIPFamily(ips []string, svc *corev1.Service) []string {
 	var ipv4Addresses []string
 	var ipv6Addresses []string
 	var allAddresses []string
@@ -153,10 +192,10 @@ func filterByIPFamily(ips []string, svc *corev1.Service, forceDualStack bool) ([
 		}
 	}
 
-	if forceDualStack {
+	if hasDualStackSupport(svc) {
 		allAddresses = append(allAddresses, ipv4Addresses...)
 		allAddresses = append(allAddresses, ipv6Addresses...)
-		return allAddresses, nil
+		return allAddresses
 	}
 
 	for _, ipFamily := range svc.Spec.IPFamilies {
@@ -167,5 +206,5 @@ func filterByIPFamily(ips []string, svc *corev1.Service, forceDualStack bool) ([
 			allAddresses = append(allAddresses, ipv6Addresses...)
 		}
 	}
-	return allAddresses, nil
+	return allAddresses
 }
