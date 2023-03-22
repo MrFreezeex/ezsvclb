@@ -52,8 +52,8 @@ type ServiceReconciler struct {
 func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx).WithValues("service", req.NamespacedName)
 
-	svc := &corev1.Service{}
-	err := r.Get(ctx, req.NamespacedName, svc)
+	svc := corev1.Service{}
+	err := r.Get(ctx, req.NamespacedName, &svc)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			// Object not found, return.
@@ -86,7 +86,7 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 }
 
 // isServiceSupported returns true if the service is supported by the controller
-func (r ServiceReconciler) isServiceSupported(service *corev1.Service) bool {
+func (r ServiceReconciler) isServiceSupported(service corev1.Service) bool {
 	if !service.DeletionTimestamp.IsZero() {
 		return false
 	}
@@ -130,7 +130,7 @@ func (r *ServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				// Attempt to resync all supported service if a node change
 				requests := []ctrl.Request{}
 				for _, service := range services.Items {
-					if r.isServiceSupported(&service) {
+					if r.isServiceSupported(service) {
 						name := types.NamespacedName{Name: service.Name, Namespace: service.Namespace}
 						requests = append(requests, ctrl.Request{NamespacedName: name})
 					}
