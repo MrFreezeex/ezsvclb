@@ -1,80 +1,38 @@
 # ezsvclb
-// TODO(user): Add simple overview of use/purpose
 
-## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+ezsvclb is a Kubernetes controller that automatically creates a load balancer for a service.
+It is heavily inspired by k3s servicelb and allow you to "advertise" node IPs
+where the target pods are running on. 
+
+Unlike k3s servicelb, it DOES NOT effectively do anything on its own! It simply advertises
+the IPs in the service's status so that externaldns and other tools that rely on this information
+can be used with your cluster. To effectively route traffic to your pods you will need
+to use `hostPort` or even `hostNetwork`.
+
+Thanks to k3s servicelb for the inspiration and a significant part of the code that
+has been adapted for ezsvclb! 
 
 ## Getting Started
-You’ll need a Kubernetes cluster to run against. You can use [KIND](https://sigs.k8s.io/kind) to get a local cluster for testing, or run against a remote cluster.
-**Note:** Your controller will automatically use the current context in your kubeconfig file (i.e. whatever cluster `kubectl cluster-info` shows).
 
-### Running on the cluster
-1. Install Instances of Custom Resources:
+This controller can be deployed using kustomize. You can deploy it using either
+the `ezsvclb` folder or the `ezsvclb-default` folder. The difference is that `ezsvclb` only
+pick up services with the `ezsvclb` [Load Balancer Class](https://kubernetes.io/docs/concepts/services-networking/service/#load-balancer-class). Whereas with `ezsvclb-default`
+will also pick up services without a Load Balancer Class as well.
 
+You can run the following command to deploy the controller:
 ```sh
-kubectl apply -f config/samples/
+kustomize build config/ezsvclb | kubectl apply -f -
 ```
 
-2. Build and push your image to the location specified by `IMG`:
-
+Or this command if you want to use the default class:
 ```sh
-make docker-build docker-push IMG=<some-registry>/ezsvclb:tag
+kustomize build config/ezsvclb-default | kubectl apply -f -
 ```
 
-3. Deploy the controller to the cluster with the image specified by `IMG`:
-
-```sh
-make deploy IMG=<some-registry>/ezsvclb:tag
-```
-
-### Uninstall CRDs
-To delete the CRDs from the cluster:
-
-```sh
-make uninstall
-```
-
-### Undeploy controller
-UnDeploy the controller from the cluster:
-
-```sh
-make undeploy
-```
-
-## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
-
-### How it works
-This project aims to follow the Kubernetes [Operator pattern](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/).
-
-It uses [Controllers](https://kubernetes.io/docs/concepts/architecture/controller/),
-which provide a reconcile function responsible for synchronizing resources until the desired state is reached on the cluster.
-
-### Test It Out
-1. Install the CRDs into the cluster:
-
-```sh
-make install
-```
-
-2. Run your controller (this will run in the foreground, so switch to a new terminal if you want to leave it running):
-
-```sh
-make run
-```
-
-**NOTE:** You can also run this in one step by running: `make install run`
-
-### Modifying the API definitions
-If you are editing the API definitions, generate the manifests such as CRs or CRDs using:
-
-```sh
-make manifests
-```
-
-**NOTE:** Run `make --help` for more information on all potential `make` targets
-
-More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
+Note that ingress-nginx Helm chart currently (03/2023) doesn't support using
+Load Balancer Class so you will have to use `ezsvclb-default` in this case. If
+you also happen to run on k3s you will have to disable `servicelb`
+with `--disable=servicelb` in k3s.
 
 ## License
 
