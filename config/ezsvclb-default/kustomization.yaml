@@ -3,7 +3,4 @@ namePrefix: ezsvclb-
 
 bases:
 - ../rbac
-- ../manager
-
-patchesStrategicMerge:
-- manager_svclb_patch.yaml
+- ../manager-default

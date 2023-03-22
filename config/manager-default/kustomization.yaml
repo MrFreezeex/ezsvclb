@@ -1,0 +1,5 @@
+resources:
+- ../manager
+
+patchesStrategicMerge:
+- manager_default_patch.yaml
