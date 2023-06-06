@@ -37,15 +37,14 @@ with `--disable=servicelb` in k3s.
 ## Annotations
 
 - `ezsvclb.io/hostname: "<true|false>"`: Also reports node hostnames in the service load balancer
-  status (disabled by default). This may be useful if you care about IPv6 support and you use
-  externaldns. When hostname are provided externaldns will create CNAME records.
+  status (disabled by default). When hostnames are provided externaldns will create CNAME records.
 - `ezsvclb.io/hostname-suffix: "<string>"`: Append the specified text to the reported hostnames.
   This may be useful if you don't have fqdn for your node names. 
-- `ezsvclb.io/ip: "<true|false>"`: Specifiy whether you want to report IPs in the service
+- `ezsvclb.io/ip: "<true|false>"`: Specify whether you want to report IPs in the service
   load balancer status (enabled by default).
 - `ezsvclb.io/force-dual-stack: "<true|false>"`: Report both type of IPs regardless of the setting of the service.
   This may be useful for instance if your cluster doesn't support IPv6 but your hosts do
-  and you use `hostNetwork`. Note that externaldns **DOES NOT** support IPv6 addresses in status though.
+  and you use `hostNetwork`.
 
 ## License
 
