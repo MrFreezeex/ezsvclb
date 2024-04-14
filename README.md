@@ -1,5 +1,9 @@
 # ezsvclb
 
+> [!IMPORTANT]  
+> Most of the features in ezsvclb are now part of Cilium 1.16 "NodeIPAM" that I helped shaped.
+> I suggest using this if you can instead of ezsvclb.
+
 ezsvclb is a Kubernetes controller that automatically creates a load balancer for a service.
 It is heavily inspired by k3s servicelb and allow you to "advertise" node IPs
 where the target pods are running on. 
